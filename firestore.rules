@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: comments
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, max length 50) - The name of the commenter
+    //   - message: string (required, max length 1000) - The content of the comment
+    //   - createdAt: timestamp (required) - When the comment was created
+    //   - isPinned: boolean (optional) - Whether the comment is pinned by admin
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidComment() {
+      return hasOnlyAllowedFields(['name', 'message', 'createdAt', 'isPinned']) &&
+             request.resource.data.name is string &&
+             request.resource.data.name.size() > 0 &&
+             request.resource.data.name.size() <= 50 &&
+             request.resource.data.message is string &&
+             request.resource.data.message.size() > 0 &&
+             request.resource.data.message.size() <= 1000 &&
+             request.resource.data.createdAt is timestamp &&
+             (!('isPinned' in request.resource.data) || request.resource.data.isPinned is bool);
+    }
+
+    function isOnlyUpdatingPinned() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isPinned']) &&
+             request.resource.data.isPinned is bool;
+    }
+
+    match /comments/{commentId} {
+      // Allow public read since comments are meant to be seen by everyone
+      allow read: if true;
+      
+      // Allow anyone to create a comment as long as it's valid
+      allow create: if isValidComment();
+      
+      // Allow updating only the isPinned field
+      allow update: if isOnlyUpdatingPinned();
+      
+      // Allow anyone to delete (Frontend UI will restrict this to the admin login)
+      // Note: In a production app, we would use Firebase Auth to secure this.
+      allow delete: if true;
+    }
+  }
+}
